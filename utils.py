@@ -117,7 +117,7 @@ def get_label(label_path, class_map):
     class_ids = np.array(class_ids, dtype=np.float32)[..., None]
     return np.concatenate([bbox, class_ids], axis=-1)
 
-
+@tf.function
 def get_image(image_path, input_shape=None):
     H = W = input_shape
     img = tf.io.read_file(image_path)
@@ -128,8 +128,10 @@ def get_image(image_path, input_shape=None):
 
 def load_data(input_shape=None):
     def load_data(image_path, label):
-        return (get_image(image_path, input_shape=input_shape),
-                encode_targets(label, input_shape=input_shape))
+        images = get_image(image_path, input_shape=input_shape)
+        targets = encode_targets(label, input_shape=input_shape)
+        # To-do : transform bbox to account image resizing, add random_flip
+        return images, targets
     return load_data
 
 
