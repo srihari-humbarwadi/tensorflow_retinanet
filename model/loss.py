@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 
-class Loss():
+class Loss(tf.keras.losses.Loss):
     def __init__(self, n_classes=None):
         self.smooth_l1 = tf.losses.Huber()
         self.num_classes = n_classes
@@ -18,7 +18,7 @@ class Loss():
         loss = tf.reduce_mean(loss)
         return loss
 
-    def loss(self,
+    def call(self,
              classification_targets,
              classification_predictions,
              regression_targets,

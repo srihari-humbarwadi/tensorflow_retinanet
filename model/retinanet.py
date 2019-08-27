@@ -2,7 +2,8 @@ import tensorflow as tf
 from .blocks import build_classification_subnet, build_regression_subnet, conv_block, Upsampling
 
 
-def RetinaNet(H=512, W=512, n_classes=80):
+def RetinaNet(input_shape=None, n_classes=None):
+    H = W = input_shape
     base_model = tf.keras.applications.ResNet50(
         input_shape=[H, W, 3], weights='imagenet', include_top=False)
 

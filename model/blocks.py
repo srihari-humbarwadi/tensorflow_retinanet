@@ -58,7 +58,7 @@ def build_regression_subnet(n_anchors=9):
                                           padding='same',
                                           kernel_initializer=tf.keras.initializers.RandomNormal(
                                               0.0, 0.01),
-                                          bias_initializer=tf.keras.initializers.zeros(), 
+                                          bias_initializer=tf.keras.initializers.zeros(),
                                           activation=None)(x)
     output_layer = tf.keras.layers.Reshape(target_shape=[-1, 4])(output_layer)
     return tf.keras.Model(inputs=input_layer, outputs=output_layer, name='regression_subnet')

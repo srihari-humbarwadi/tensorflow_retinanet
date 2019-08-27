@@ -96,7 +96,8 @@ def draw_bboxes(image, bbox_list):
     ], axis=-1), dtype=tf.float32)
     # To do, set colors for each class
     colors = tf.random.uniform(maxval=1, shape=[bbox_list.shape[0], 3])
-    return tf.image.draw_bounding_boxes(image[None, ...], bboxes[None, ...], colors)[0, ...]
+    return tf.image.draw_bounding_boxes(image[None, ...],
+                                        bboxes[None, ...], colors)[0, ...]
 
 
 def get_label(label_path, class_map):
@@ -117,18 +118,23 @@ def get_label(label_path, class_map):
     return np.concatenate([bbox, class_ids], axis=-1)
 
 
-def get_image(image_path):
+def get_image(image_path, input_shape=None):
+    H = W = input_shape
     img = tf.io.read_file(image_path)
     img = tf.image.decode_jpeg(img)
+    img = tf.image.resize(img, size=[H, W])
     return img
 
 
-def load_data(image_path, label):
-    return get_image(image_path), encode_targets(label, input_shape=512)
+def load_data(input_shape=None):
+    def load_data(image_path, label):
+        return (get_image(image_path, input_shape=input_shape),
+                encode_targets(label, input_shape=input_shape))
+    return load_data
 
 
 @tf.function
-def encode_targets(label, input_shape=512):
+def encode_targets(label, input_shape=None):
     """We use the assignment rule from RPN.
         Faster RCNN box coder follows the coding schema described below:
             ty = (y - ya) / ha
@@ -156,10 +162,11 @@ def encode_targets(label, input_shape=512):
     selected_gt_boxes = tf.gather(gt_boxes, max_ids)
     selected_gt_class_ids = 1. + tf.gather(gt_class_ids, max_ids)
 
-    # set achors with iou < 0.5 to 0
+    """ set achors with iou < 0.5 to 0
+        set achors with iou iout > 0.4 && < 0.5 to -1
+    """
     selected_gt_class_ids = selected_gt_class_ids * \
         tf.cast(background_mask, dtype=tf.float32)
-    # set achors with iou iout > 0.4 && < 0.5 to -1
     classification_targets = selected_gt_class_ids - \
         tf.cast(
             ignore_mask, dtype=tf.float32)
@@ -175,7 +182,7 @@ def encode_targets(label, input_shape=512):
             ignore_mask)
 
 
-def decode_targets(classification_outputs, regression_outputs, input_shape=512, classification_threshold=0.05, nms_threshold=0.5):
+def decode_targets(classification_outputs, regression_outputs, input_shape=None, classification_threshold=0.05, nms_threshold=0.5):
     anchors = get_anchors(input_shape=input_shape, tensor=True)
     confidence_scores = tf.reduce_max(
         tf.sigmoid(classification_outputs), axis=-1)
