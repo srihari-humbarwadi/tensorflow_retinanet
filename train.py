@@ -92,9 +92,15 @@ def input_fn(training=True, context_id=None):
 
 
 model = RetinaNet(input_shape=input_shape, n_classes=n_classes)
+model.build([None, input_shape, input_shape, 3])
 loss_fn = Loss(n_classes=n_classes)
 optimizer = tf.keras.optimizers.SGD(lr=0.001, momentum=0.9, decay=1e-4)
 
+model_dir = 'model_files/'
+checkpoint = tf.train.Checkpoint(model=model, optimizer=optimizer)
+checkpoint_manager = tf.train.CheckpointManager(checkpoint,
+                                                directory=model_dir,
+                                                max_to_keep=None)
 
 @tf.function
 def training_step(batch):
@@ -145,8 +151,8 @@ def validation_step(batch):
     return loss_dict
 
 
-for ep in range(EPOCHS):
-    for batch in input_fn(training=True)():
-        pass
-    for batch in input_fn(training=False)():
-        pass
+# for ep in range(EPOCHS):
+#     for batch in input_fn(training=True)():
+#         pass
+#     for batch in input_fn(training=False)():
+#         pass
