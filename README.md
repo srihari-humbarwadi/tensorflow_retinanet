@@ -1,1 +1,3 @@
-# RetinaNet_TF2.0
+# RetinaNet - Focal Loss for Dense Object Detection
+ ## Architecture
+![architecture](architecture.png)
