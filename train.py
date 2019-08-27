@@ -69,24 +69,23 @@ def input_fn(training=True, context_id=None):
     def train_input_fn():
         train_dataset = tf.data.Dataset.from_generator(
             train_data_generator, output_types=(tf.string, tf.float32))
-        train_dataset = train_dataset.shuffle(1000)
+        train_dataset = train_dataset.shuffle(1024)
         train_dataset = train_dataset.map(
             load_data(input_shape), num_parallel_calls=tf.data.experimental.AUTOTUNE)
         train_dataset = train_dataset.batch(BATCH_SIZE, drop_remainder=True)
         train_dataset = train_dataset.prefetch(tf.data.experimental.AUTOTUNE)
-        return train_dataset.repeat()
+        return train_dataset
 
     def validation_input_fn():
         validation_dataset = tf.data.Dataset.from_generator(
             validation_data_generator, output_types=(tf.string, tf.float32))
-        validation_dataset = validation_dataset.shuffle(1000)
         validation_dataset = validation_dataset.map(
             load_data(input_shape), num_parallel_calls=tf.data.experimental.AUTOTUNE)
         validation_dataset = validation_dataset.batch(
             BATCH_SIZE, drop_remainder=True)
         validation_dataset = validation_dataset.prefetch(
             tf.data.experimental.AUTOTUNE)
-        return validation_dataset.repeat()
+        return validation_dataset
     if training:
         return train_input_fn
     return validation_input_fn
@@ -94,9 +93,60 @@ def input_fn(training=True, context_id=None):
 
 model = RetinaNet(input_shape=input_shape, n_classes=n_classes)
 loss_fn = Loss(n_classes=n_classes)
+optimizer = tf.keras.optimizers.SGD(lr=0.001, momentum=0.9, decay=1e-4)
+
+
+@tf.function
+def training_step(batch):
+    image, (classification_targets,
+            regression_targets,
+            background_mask,
+            ignore_mask) = batch
+    with tf.GradientTape() as tape:
+        regression_predictions, classification_predictions = model(
+            image, training=True)
+        Lreg, Lcls = loss_fn(classification_targets,
+                             classification_predictions,
+                             regression_targets,
+                             regression_predictions,
+                             background_mask,
+                             ignore_mask)
+        total_loss = Lreg + Lcls
+    gradients = tape.gradient(total_loss, model.trainable_variables)
+    optimizer.apply(zip(gradients, model.trainable_variables))
+    loss_dict = {
+        'box_loss': Lreg,
+        'cls_loss': Lcls,
+        'total_loss': total_loss
+    }
+    return loss_dict
+
+
+@tf.function
+def validation_step(batch):
+    image, (classification_targets,
+            regression_targets,
+            background_mask,
+            ignore_mask) = batch
+    regression_predictions, classification_predictions = model(
+        image, training=False)
+    Lreg, Lcls = loss_fn(classification_targets,
+                         classification_predictions,
+                         regression_targets,
+                         regression_predictions,
+                         background_mask,
+                         ignore_mask)
+    total_loss = Lreg + Lcls
+    loss_dict = {
+        'box_loss': Lreg,
+        'cls_loss': Lcls,
+        'total_loss': total_loss
+    }
+    return loss_dict
+
 
 for ep in range(EPOCHS):
-    for batch in tqdm(input_fn(training=True)(), total=training_steps):
+    for batch in input_fn(training=True)():
         pass
-    for batch in tqdm(input_fn(training=False)(), total=validation_steps):
+    for batch in input_fn(training=False)():
         pass
