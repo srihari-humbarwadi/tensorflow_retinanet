@@ -4,13 +4,10 @@ import numpy as np
 import tensorflow as tf
 
 
-
-
-
 def compute_anchor_dimensions(ratios=[0.5, 1, 2],
                               scales=[1, 1.25, 1.58],
                               areas=[32 * 32, 64 * 64, 128 * 128, 256 * 256, 512 * 512]):
-    anchor_shapes = {f'P{i}': [] for i in range(3, 8)}
+    anchor_shapes = {'P{}'.format(i): [] for i in range(3, 8)}
     for area in areas:
         for ratio in ratios:
             a_h = np.sqrt(area / ratio)
@@ -18,8 +15,10 @@ def compute_anchor_dimensions(ratios=[0.5, 1, 2],
             for scale in scales:
                 h = np.int32(scale * a_h)
                 w = np.int32(scale * a_w)
-                anchor_shapes[f'P{int(np.log2(np.sqrt(area)//4))}'].append([w, h])
-        anchor_shapes[f'P{int(np.log2(np.sqrt(area)//4))}'] = np.array(anchor_shapes[f'P{int(np.log2(np.sqrt(area)//4))}'])
+                anchor_shapes['P{}'.format(
+                    int(np.log2(np.sqrt(area) // 4)))].append([w, h])
+        anchor_shapes['P{}'.format(int(np.log2(np.sqrt(area) // 4)))] = np.array(
+            anchor_shapes['P{}'.format(int(np.log2(np.sqrt(area) // 4)))])
     return anchor_shapes
 
 
@@ -27,7 +26,7 @@ def get_anchors(input_shape=512, tensor=True):
     anchor_dimensions = compute_anchor_dimensions()
     anchors = []
     for i in range(3, 8):
-        feature_name = f'P{i}'
+        feature_name = 'P{}'.format(i)
         stride = 2**i
         feature_size = (input_shape) // stride
 
@@ -101,7 +100,7 @@ def draw_bboxes(image, bbox_list):
     return tf.image.draw_bounding_boxes(image[None, ...], bboxes[None, ...], colors)[0, ...]
 
 
-def get_label(label_path):
+def get_label(label_path, class_map):
     with open(label_path, 'r') as f:
         temp = json.load(f)
     bbox = []
@@ -131,7 +130,7 @@ def load_data(image_path, label):
 
 @tf.function
 def encode_targets(label, input_shape=512):
-    """We use the assignment rule from RPN. 
+    """We use the assignment rule from RPN.
         Faster RCNN box coder follows the coding schema described below:
             ty = (y - ya) / ha
             tx = (x - xa) / wa
@@ -139,8 +138,8 @@ def encode_targets(label, input_shape=512):
             tw = log(w / wa)
         where x, y, w, h denote the box's center coordinates, width and height
         respectively. Similarly, xa, ya, wa, ha denote the anchor's center
-        coordinates, width and height. tx, ty, tw and th denote the anchor-encoded
-        center, width and height respectively.
+        coordinates, width and height. tx, ty, tw and th denote the
+        anchor-encoded center, width and height respectively.
         See http://arxiv.org/abs/1506.01497 for details.
     """
     anchors = get_anchors(input_shape=input_shape, tensor=True)
@@ -158,20 +157,23 @@ def encode_targets(label, input_shape=512):
     selected_gt_boxes = tf.gather(gt_boxes, max_ids)
     selected_gt_class_ids = 1. + tf.gather(gt_class_ids, max_ids)
 
+    # set achors with iou < 0.5 to 0
     selected_gt_class_ids = selected_gt_class_ids * \
-        tf.cast(background_mask, dtype=tf.float32)  # set achors with iou < 0.5 to 0
-
+        tf.cast(background_mask, dtype=tf.float32)
+    # set achors with iou iout > 0.4 && < 0.5 to -1
     classification_targets = selected_gt_class_ids - \
         tf.cast(
-            ignore_mask, dtype=tf.float32)   # set achors with iou iout > 0.4 && < 0.5 to -1
-
+            ignore_mask, dtype=tf.float32)
     regression_targets = tf.stack([
         (selected_gt_boxes[:, 0] - anchors[:, 0]) / anchors[:, 2],
         (selected_gt_boxes[:, 1] - anchors[:, 1]) / anchors[:, 3],
         tf.math.log(selected_gt_boxes[:, 2] / anchors[:, 2]),
         tf.math.log(selected_gt_boxes[:, 3] / anchors[:, 3])
     ], axis=-1)
-    return tf.cast(classification_targets, dtype=tf.int32), regression_targets, background_mask, ignore_mask
+    return (tf.cast(classification_targets, dtype=tf.int32),
+            regression_targets,
+            background_mask,
+            ignore_mask)
 
 
 def decode_targets(classification_outputs, regression_outputs, input_shape=512, classification_threshold=0.05, nms_threshold=0.5):
@@ -198,4 +200,4 @@ def decode_targets(classification_outputs, regression_outputs, input_shape=512, 
     final_boxes_ = tf.gather(non_zero_class_bboxes, nms_indices)
     final_boxes = tf.cast(change_box_format(final_boxes_, return_format='x1y1x2y2'),
                           dtype=tf.int32)
-    return final_boxes, final_class_ids, final_scorescsss
+    return final_boxes, final_class_ids, final_scores

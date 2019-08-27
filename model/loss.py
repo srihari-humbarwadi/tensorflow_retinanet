@@ -2,8 +2,9 @@ import tensorflow as tf
 
 
 class Loss():
-    def __init__(self, num_classes=None):
+    def __init__(self, n_classes=None):
         self.smooth_l1 = tf.losses.Huber()
+        self.num_classes = n_classes
 
     def focal_loss(self, y_true, y_pred, alpha=0.25, gamma=2):
         y_true = tf.one_hot(y_true, depth=self.num_classes + 1)

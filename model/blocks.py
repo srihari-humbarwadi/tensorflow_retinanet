@@ -1,7 +1,13 @@
 import tensorflow as tf
 
 
-def conv_block(x, n_filters, size, strides=1, kernel_init='he_normal', bias_init='zeros', bn_activated=False):
+def conv_block(x,
+               n_filters,
+               size,
+               strides=1,
+               kernel_init='he_normal',
+               bias_init='zeros',
+               bn_activated=False):
     x = tf.keras.layers.Conv2D(filters=n_filters,
                                kernel_size=size,
                                padding='same',
