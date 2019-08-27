@@ -8,7 +8,7 @@ def RetinaNet(H=512, W=512, n_classes=80):
 
     resnet_block_output_names = ['conv3_block4_out',
                                  'conv4_block6_out', 'conv5_block3_out']
-    resnet_block_outputs = {'C{}'.format(idx + 3): base_model.get_layer(
+    resnet_block_outputs = {f'C{idx + 3}': base_model.get_layer(
         layer).output for idx, layer in enumerate(resnet_block_output_names)}
     resnet_block_outputs = {level: conv_block(
         tensor, 256, 1) for level, tensor in resnet_block_outputs.items()}
