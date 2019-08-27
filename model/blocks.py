@@ -32,14 +32,15 @@ def build_classification_subnet(n_classes=100, n_anchors=9, p=0.01):
         x = conv_block(
             x, 256, 3, kernel_init=tf.keras.initializers.RandomNormal(0.0, 0.01))
         x = tf.keras.layers.ReLU()(x)
+    bias_init = -tf.math.log((1 - p) / p).numpy()
     output_layer = tf.keras.layers.Conv2D(filters=n_classes * n_anchors,
                                           kernel_size=3,
                                           padding='same',
                                           kernel_initializer=tf.keras.initializers.RandomNormal(
                                               0.0, 0.01),
                                           bias_initializer=tf.keras.initializers.Constant(
-                                              value=-tf.math.log((1 - p) / p)),
-                                          activation='sigmoid')(x)
+                                              value=bias_init),
+                                          activation=None)(x)
     output_layer = tf.keras.layers.Reshape(
         target_shape=[-1, n_classes])(output_layer)
     return tf.keras.Model(inputs=input_layer, outputs=output_layer, name='classification_subnet')
@@ -57,6 +58,7 @@ def build_regression_subnet(n_anchors=9):
                                           padding='same',
                                           kernel_initializer=tf.keras.initializers.RandomNormal(
                                               0.0, 0.01),
-                                          bias_initializer=tf.keras.initializers.zeros())(x)
+                                          bias_initializer=tf.keras.initializers.zeros(), 
+                                          activation=None)(x)
     output_layer = tf.keras.layers.Reshape(target_shape=[-1, 4])(output_layer)
     return tf.keras.Model(inputs=input_layer, outputs=output_layer, name='regression_subnet')

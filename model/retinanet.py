@@ -1,5 +1,5 @@
 import tensorflow as tf
-from blocks import build_classification_subnet, build_regression_subnet, conv_block, Upsampling
+from .blocks import build_classification_subnet, build_regression_subnet, conv_block, Upsampling
 
 
 def RetinaNet(H=512, W=512, n_classes=80):

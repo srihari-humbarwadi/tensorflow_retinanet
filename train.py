@@ -1,12 +1,18 @@
 from glob import glob
-from model.retinanet import Retinanet
+from model.retinanet import RetinaNet
 from model.loss import Loss
+import os
 import tensorflow as tf
 from tqdm import tqdm
 from utils import get_label, load_data
 
-image_paths = sorted(glob('../bdd/bdd100k/images/100k/train/*'))
-label_paths = sorted(glob('../bdd/bdd100k/labels/100k/train/*'))
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+print(os.getcwd())
+image_paths = sorted(glob('../../bdd/bdd100k/images/100k/train/*'))
+label_paths = sorted(glob('../../bdd/bdd100k/labels/100k/train/*'))
+print('Found {} images'.format(len(image_paths)))
+print('Found {} labels'.format(len(label_paths)))
+
 class_map = {value: idx for idx, value in enumerate(['bus',
                                                      'traffic light',
                                                      'traffic sign',
@@ -41,5 +47,9 @@ dataset = dataset.map(
 dataset = dataset.batch(16)
 
 
-model = Retinanet(H=512, W=512, n_classes=n_classes)
+model = RetinaNet(H=512, W=512, n_classes=n_classes)
 loss_fn = Loss(n_classes=n_classes)
+
+
+for batch in dataset.take(1):
+    print(batch)
