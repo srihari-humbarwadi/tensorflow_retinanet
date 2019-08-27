@@ -130,7 +130,7 @@ def load_data(input_shape=None):
     def load_data(image_path, label):
         images = get_image(image_path, input_shape=input_shape)
         targets = encode_targets(label, input_shape=input_shape)
-        # To-do : transform bbox to account image resizing, add random_flip
+        # To-do : transform bbox to account image resizing, add random_flip 
         return images, targets
     return load_data
 
