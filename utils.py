@@ -152,7 +152,6 @@ def encode_targets(label, input_shape=None):
             tx = (x - xa) / wa
             th = log(h / ha)
             tw = log(w / wa)
-            
         where x, y, w, h denote the box's center coordinates, width and height
         respectively. Similarly, xa, ya, wa, ha denote the anchor's center
         coordinates, width and height. tx, ty, tw and th denote the
@@ -160,7 +159,12 @@ def encode_targets(label, input_shape=None):
         The open-source implementation recommends using [10.0, 10.0, 5.0, 5.0] as
         scale factors.
         See http://arxiv.org/abs/1506.01497 for details. 
-        
+        Set achors with iou < 0.5 to 0 and
+        set achors with iou iou > 0.4 && < 0.5 to -1. Convert
+        regression targets into one-hot encoding (N, #anchors, n_classes + 1)
+        in loss_fn and exclude background class in loss calculation.
+        Use [0, 0, 0, ... 0, n_classes] (all units set to zeros) to represent
+        background class.
     """
     scale_factors = tf.constant([10.0, 10.0, 5.0, 5.0])
     anchors = get_anchors(input_shape=input_shape, tensor=True)
@@ -175,12 +179,10 @@ def encode_targets(label, input_shape=None):
     background_mask = max_ious > 0.5
     ignore_mask = tf.logical_and(max_ious > 0.4, max_ious < 0.5)
 
+
     selected_gt_boxes = tf.gather(gt_boxes, max_ids)
     selected_gt_class_ids = 1. + tf.gather(gt_class_ids, max_ids)
 
-    """ set achors with iou < 0.5 to 0
-        set achors with iou iout > 0.4 && < 0.5 to -1
-    """
     selected_gt_class_ids = selected_gt_class_ids * \
         tf.cast(background_mask, dtype=tf.float32)
     classification_targets = selected_gt_class_ids - \
