@@ -158,7 +158,7 @@ for ep in range(EPOCHS):
         Lreg, Lcls, total_loss, num_positive_detections = validation_step(
             batch)
         logs = {
-            'step': '{}/{}'.format(step + 1, training_steps),
+            'step': '{}/{}'.format(step + 1, validation_steps),
             'box_loss': np.round(Lreg.numpy(), 2),
             'cls_loss': np.round(Lcls.numpy(), 2),
             'total_loss': np.round(total_loss.numpy(), 2),
