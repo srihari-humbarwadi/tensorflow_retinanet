@@ -3,7 +3,7 @@ import tensorflow as tf
 
 class Loss():
     def __init__(self, n_classes=None):
-        self.smooth_l1 = tf.losses.Huber()
+        self.smooth_l1 = tf.losses.Huber(reduction='none')
         self.num_classes = n_classes
 
     def focal_loss(self, y_true, y_pred, alpha=0.25, gamma=2):
@@ -14,8 +14,7 @@ class Loss():
         at = alpha * y_true + (1 - y_true) * (1 - alpha)
         pt = y_true * y_pred + (1 - y_true) * (1 - y_pred)
         f_loss = -at * tf.pow(1 - pt, gamma) * tf.math.log(pt)
-        loss = tf.reduce_sum(f_loss)
-        return loss
+        return f_loss
 
     def __call__(self,
                  classification_targets,
@@ -38,8 +37,8 @@ class Loss():
         classification_predictions_positive = tf.boolean_mask(
             classification_predictions, positive_classification_mask)
 
-        Lreg = self.smooth_l1(regression_targets_positive,
-                              regression_predictions_positive)
-        Lcls = self.focal_loss(classification_targets_positive,
-                               classification_predictions_positive)
-        return Lreg / num_positive_detections, Lcls / num_positive_detections
+        Lreg = tf.reduce_sum(self.smooth_l1(regression_targets_positive,
+                                            regression_predictions_positive))
+        Lcls = tf.reduce_sum(self.focal_loss(classification_targets_positive,
+                                             classification_predictions_positive))
+        return (Lreg + Lcls) / num_positive_detections
