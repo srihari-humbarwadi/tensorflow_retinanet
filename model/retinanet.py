@@ -12,18 +12,19 @@ def RetinaNet(input_shape=None, n_classes=None):
     resnet_block_outputs = {'C{}'.format(idx + 3): base_model.get_layer(
         layer).output for idx, layer in enumerate(resnet_block_output_names)}
     resnet_block_outputs = {level: conv_block(
-        tensor, 256, 1) for level, tensor in resnet_block_outputs.items()}
+        tensor, 256, 1, name=level + '_1x1') for level, tensor in resnet_block_outputs.items()}
 
     P5 = resnet_block_outputs['C5']
-    P6 = conv_block(P5, 256, 3, strides=2)
-    P6_relu = tf.keras.layers.ReLU()(P6)
-    P7 = conv_block(P6_relu, 256, 3, strides=2)
-    M4 = tf.keras.layers.add([tf.keras.layers.Lambda(Upsampling, arguments={'scale': 2})(
-        P5), resnet_block_outputs['C4']])
-    M3 = tf.keras.layers.add([tf.keras.layers.Lambda(Upsampling, arguments={'scale': 2})(
-        M4), resnet_block_outputs['C3']])
-    P4 = conv_block(M4, 256, 3)
-    P3 = conv_block(M3, 256, 3)
+    P6 = conv_block(base_model.get_layer(
+        'conv5_block3_out').output, 256, 3, strides=2, name='P6')
+    P6_relu = tf.keras.layers.ReLU(name='P6')(P6)
+    P7 = conv_block(P6_relu, 256, 3, strides=2, name='P7')
+    M4 = tf.keras.layers.add([tf.keras.layers.Lambda(Upsampling, arguments={'scale': 2}, name='P5_UP')(
+        P5), resnet_block_outputs['C4']], name='P4_merge')
+    M3 = tf.keras.layers.add([tf.keras.layers.Lambda(Upsampling, arguments={'scale': 2}, name='P4_UP')(
+        M4), resnet_block_outputs['C3']], name='P3_merge')
+    P4 = conv_block(M4, 256, 3, name='P4')
+    P3 = conv_block(M3, 256, 3, name='P3')
     pyrammid_features = [P7, P6, P5, P4, P3]
 
     classification_subnet = build_classification_subnet(n_classes=n_classes)

@@ -7,13 +7,14 @@ def conv_block(x,
                strides=1,
                kernel_init='he_normal',
                bias_init='zeros',
-               bn_activated=False):
+               bn_activated=False, name=''):
     x = tf.keras.layers.Conv2D(filters=n_filters,
                                kernel_size=size,
                                padding='same',
                                strides=strides,
                                kernel_initializer=kernel_init,
-                               bias_initializer=bias_init)(x)
+                               bias_initializer=bias_init,
+                               name='conv_' + name if name else None)(x)
     if bn_activated:
         x = tf.keras.layers.BatchNormalization()(x)
         x = tf.keras.layers.ReLU()(x)
