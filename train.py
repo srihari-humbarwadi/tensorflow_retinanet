@@ -109,7 +109,7 @@ def training_step(batch):
             background_mask,
             ignore_mask) = batch
     with tf.GradientTape() as tape:
-        regression_predictions, classification_predictions = model(
+        classification_predictions, regression_predictions = model(
             image, training=True)
         Lreg, Lcls = loss_fn(classification_targets,
                              classification_predictions,
@@ -119,7 +119,7 @@ def training_step(batch):
                              ignore_mask)
         total_loss = Lreg + Lcls
     gradients = tape.gradient(total_loss, model.trainable_variables)
-    optimizer.apply(zip(gradients, model.trainable_variables))
+    optimizer.apply_gradients(zip(gradients, model.trainable_variables))
     loss_dict = {
         'box_loss': Lreg,
         'cls_loss': Lcls,
@@ -134,7 +134,7 @@ def validation_step(batch):
             regression_targets,
             background_mask,
             ignore_mask) = batch
-    regression_predictions, classification_predictions = model(
+    classification_predictions, regression_predictions  = model(
         image, training=False)
     Lreg, Lcls = loss_fn(classification_targets,
                          classification_predictions,

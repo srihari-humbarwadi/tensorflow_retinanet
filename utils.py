@@ -88,7 +88,7 @@ def change_box_format(boxes, return_format='xywh'):
 
 
 def draw_bboxes(image, bbox_list):
-    image = tf.image.convert_image_dtype(image, dtype=tf.float32)
+    image = image / 255.
     h, w = image.shape.as_list()[:2]
     bboxes = tf.cast(tf.stack([
         bbox_list[:, 1] / h, bbox_list[:, 0] /
@@ -96,11 +96,12 @@ def draw_bboxes(image, bbox_list):
     ], axis=-1), dtype=tf.float32)
     # To do, set colors for each class
     colors = tf.random.uniform(maxval=1, shape=[bbox_list.shape[0], 3])
-    return tf.image.draw_bounding_boxes(image[None, ...],
-                                        bboxes[None, ...], colors)[0, ...]
+    return tf.image.convert_image_dtype(tf.image.draw_bounding_boxes(image[None, ...],
+                                                                     bboxes[None, ...],
+                                                                     colors)[0, ...], dtype=tf.uint8)
 
 
-def get_label(label_path, class_map):
+def get_label(label_path, class_map, input_shape=512):
     with open(label_path, 'r') as f:
         temp = json.load(f)
     bbox = []
@@ -114,8 +115,15 @@ def get_label(label_path, class_map):
             bbox.append(np.array([x1, y1, x2, y2]))
             class_ids.append(class_map[obj['category']])
     bbox = np.array(bbox, dtype=np.float32)
+    H, W = 720, 1280.  # ToDO remove hardcoded values
+    bbox[:, 0] = bbox[:, 0] / W
+    bbox[:, 2] = bbox[:, 2] / W
+    bbox[:, 1] = bbox[:, 1] / H
+    bbox[:, 3] = bbox[:, 3] / H
+    bbox = np.int32(bbox * input_shape)
     class_ids = np.array(class_ids, dtype=np.float32)[..., None]
     return np.concatenate([bbox, class_ids], axis=-1)
+
 
 @tf.function
 def get_image(image_path, input_shape=None):
@@ -123,6 +131,7 @@ def get_image(image_path, input_shape=None):
     img = tf.io.read_file(image_path)
     img = tf.image.decode_jpeg(img)
     img = tf.image.resize(img, size=[H, W])
+    img = img[:, :, ::-1] - tf.constant([103.939, 116.779, 123.68])
     return img
 
 
@@ -130,7 +139,7 @@ def load_data(input_shape=None):
     def load_data(image_path, label):
         images = get_image(image_path, input_shape=input_shape)
         targets = encode_targets(label, input_shape=input_shape)
-        # To-do : transform bbox to account image resizing, add random_flip 
+        # To-do : transform bbox to account image resizing, add random_flip
         return images, targets
     return load_data
 
@@ -149,6 +158,8 @@ def encode_targets(label, input_shape=None):
         anchor-encoded center, width and height respectively.
         See http://arxiv.org/abs/1506.01497 for details.
     """
+    mean = tf.constant([0., 0., 0., 0., ])
+    std = tf.constant([0.2, 0.2, 0.2, 0.2])
     anchors = get_anchors(input_shape=input_shape, tensor=True)
     gt_boxes = label[:, :4]
     gt_boxes = change_box_format(gt_boxes, return_format='xywh')
@@ -178,34 +189,45 @@ def encode_targets(label, input_shape=None):
         tf.math.log(selected_gt_boxes[:, 2] / anchors[:, 2]),
         tf.math.log(selected_gt_boxes[:, 3] / anchors[:, 3])
     ], axis=-1)
+    regression_targets = (regression_targets - mean) / std
     return (tf.cast(classification_targets, dtype=tf.int32),
             regression_targets,
             background_mask,
             ignore_mask)
 
 
-def decode_targets(classification_outputs, regression_outputs, input_shape=None, classification_threshold=0.05, nms_threshold=0.5):
+def decode_targets(classification_outputs,
+                   regression_outputs,
+                   input_shape=512,
+                   classification_threshold=0.05,
+                   nms_threshold=0.5):
+    mean = tf.constant([0., 0., 0., 0., ])
+    std = tf.constant([0.2, 0.2, 0.2, 0.2])
     anchors = get_anchors(input_shape=input_shape, tensor=True)
-    confidence_scores = tf.reduce_max(
-        tf.sigmoid(classification_outputs), axis=-1)
+
+    '''gt targets are in one hot form, no need to apply  sigmoid to check correctness, use sigmoid during actual inference'''
+    confidence_scores = tf.reduce_max(classification_outputs, axis=-1)
     class_ids = tf.argmax(classification_outputs, axis=-1)
+
+ #     confidence_scores = tf.reduce_max(
+#         tf.nn.sigmoid(classification_outputs), axis=-1)
+    regression_outputs = (regression_outputs * std) + mean
     boxes = tf.concat([(regression_outputs[:, :2] * anchors[:, 2:] + anchors[:, :2]),
                        tf.math.exp(regression_outputs[:, 2:]) * anchors[:, 2:]
                        ], axis=-1)
-    non_zero_class_mask = tf.where(class_ids > 0)[:, 0]
-    non_zero_class_ids = tf.gather(class_ids, non_zero_class_mask)
-    non_zero_class_confidence_scores = tf.gather(
-        confidence_scores, non_zero_class_mask)
-    non_zero_class_bboxes = tf.gather(boxes, non_zero_class_mask)
+    boxes = change_box_format(boxes, return_format='x1y1x2y2')
 
-    nms_indices = tf.image.non_max_suppression(non_zero_class_bboxes,
-                                               non_zero_class_confidence_scores,
+    nms_indices = tf.image.non_max_suppression(boxes,
+                                               confidence_scores,
+                                               score_threshold=classification_threshold,
                                                iou_threshold=nms_threshold,
                                                max_output_size=200)
+    final_class_ids = tf.gather(class_ids, nms_indices)
+    final_scores = tf.gather(confidence_scores, nms_indices)
+    final_boxes = tf.cast(tf.gather(boxes, nms_indices), dtype=tf.int32)
 
-    final_class_ids = tf.gather(non_zero_class_ids, nms_indices)
-    final_scores = tf.gather(non_zero_class_confidence_scores, nms_indices)
-    final_boxes_ = tf.gather(non_zero_class_bboxes, nms_indices)
-    final_boxes = tf.cast(change_box_format(final_boxes_, return_format='x1y1x2y2'),
-                          dtype=tf.int32)
-    return final_boxes, final_class_ids, final_scores
+    matched_anchors = tf.gather(anchors, tf.where(
+        confidence_scores > classification_threshold)[:, 0])
+    matched_anchors = tf.cast(change_box_format(matched_anchors, return_format='x1y1x2y2'),
+                              dtype=tf.int32)
+    return final_boxes, final_class_ids, final_scores, matched_anchors
