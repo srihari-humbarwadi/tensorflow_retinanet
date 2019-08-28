@@ -11,20 +11,19 @@ class Loss():
         y_true = y_true[:, 1:]
         y_pred = tf.sigmoid(y_pred)
 
-        ce = tf.losses.binary_crossentropy(y_true, y_pred, from_logits=False)
         at = alpha * y_true + (1 - y_true) * (1 - alpha)
         pt = y_true * y_pred + (1 - y_true) * (1 - y_pred)
-        loss = at * tf.pow(1 - pt, gamma) * tf.expand_dims(ce, axis=1)
-        loss = tf.reduce_mean(loss)
+        f_loss = -at * tf.pow(1 - pt, gamma) * tf.math.log(pt)
+        loss = tf.reduce_sum(f_loss)
         return loss
 
     def __call__(self,
-             classification_targets,
-             classification_predictions,
-             regression_targets,
-             regression_predictions,
-             background_mask,
-             ignore_mask):
+                 classification_targets,
+                 classification_predictions,
+                 regression_targets,
+                 regression_predictions,
+                 background_mask,
+                 ignore_mask):
         num_positive_detections = tf.maximum(tf.reduce_sum(
             tf.cast(background_mask, dtype=tf.float32)), 1.0)
         positive_classification_mask = tf.logical_not(ignore_mask)
