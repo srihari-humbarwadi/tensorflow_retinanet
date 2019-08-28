@@ -152,14 +152,17 @@ def encode_targets(label, input_shape=None):
             tx = (x - xa) / wa
             th = log(h / ha)
             tw = log(w / wa)
+            
         where x, y, w, h denote the box's center coordinates, width and height
         respectively. Similarly, xa, ya, wa, ha denote the anchor's center
         coordinates, width and height. tx, ty, tw and th denote the
         anchor-encoded center, width and height respectively.
-        See http://arxiv.org/abs/1506.01497 for details.
+        The open-source implementation recommends using [10.0, 10.0, 5.0, 5.0] as
+        scale factors.
+        See http://arxiv.org/abs/1506.01497 for details. 
+        
     """
-    mean = tf.constant([0., 0., 0., 0., ])
-    std = tf.constant([0.2, 0.2, 0.2, 0.2])
+    scale_factors = tf.constant([10.0, 10.0, 5.0, 5.0])
     anchors = get_anchors(input_shape=input_shape, tensor=True)
     gt_boxes = label[:, :4]
     gt_boxes = change_box_format(gt_boxes, return_format='xywh')
@@ -189,7 +192,7 @@ def encode_targets(label, input_shape=None):
         tf.math.log(selected_gt_boxes[:, 2] / anchors[:, 2]),
         tf.math.log(selected_gt_boxes[:, 3] / anchors[:, 3])
     ], axis=-1)
-    regression_targets = (regression_targets - mean) / std
+    regression_targets = regression_targets * scale_factors
     return (tf.cast(classification_targets, dtype=tf.int32),
             regression_targets,
             background_mask,
@@ -201,22 +204,21 @@ def decode_targets(classification_outputs,
                    input_shape=512,
                    classification_threshold=0.05,
                    nms_threshold=0.5):
-    mean = tf.constant([0., 0., 0., 0., ])
-    std = tf.constant([0.2, 0.2, 0.2, 0.2])
+    scale_factors = tf.constant([10.0, 10.0, 5.0, 5.0])
     anchors = get_anchors(input_shape=input_shape, tensor=True)
 
     '''gt targets are in one hot form, no need to apply  sigmoid to check correctness, use sigmoid during actual inference'''
     confidence_scores = tf.reduce_max(classification_outputs, axis=-1)
     class_ids = tf.argmax(classification_outputs, axis=-1)
-
- #     confidence_scores = tf.reduce_max(
-#         tf.nn.sigmoid(classification_outputs), axis=-1)
-    regression_outputs = (regression_outputs * std) + mean
+    
+ #     confidence_scores = tf.reduce_max(  
+#         tf.nn.sigmoid(classification_outputs), axis=-1)   
+    regression_outputs = regression_outputs / scale_factors
     boxes = tf.concat([(regression_outputs[:, :2] * anchors[:, 2:] + anchors[:, :2]),
                        tf.math.exp(regression_outputs[:, 2:]) * anchors[:, 2:]
                        ], axis=-1)
     boxes = change_box_format(boxes, return_format='x1y1x2y2')
-
+                          
     nms_indices = tf.image.non_max_suppression(boxes,
                                                confidence_scores,
                                                score_threshold=classification_threshold,
@@ -226,8 +228,7 @@ def decode_targets(classification_outputs,
     final_scores = tf.gather(confidence_scores, nms_indices)
     final_boxes = tf.cast(tf.gather(boxes, nms_indices), dtype=tf.int32)
 
-    matched_anchors = tf.gather(anchors, tf.where(
-        confidence_scores > classification_threshold)[:, 0])
+    matched_anchors = tf.gather(anchors, tf.where(confidence_scores > classification_threshold)[:, 0])
     matched_anchors = tf.cast(change_box_format(matched_anchors, return_format='x1y1x2y2'),
-                              dtype=tf.int32)
+                          dtype=tf.int32)    
     return final_boxes, final_class_ids, final_scores, matched_anchors
