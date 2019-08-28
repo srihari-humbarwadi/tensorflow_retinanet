@@ -1,6 +1,7 @@
 from glob import glob
 from model.retinanet import RetinaNet
 from model.loss import Loss
+import numpy as np
 import os
 import tensorflow as tf
 from tqdm import tqdm
@@ -49,7 +50,7 @@ for path in tqdm(validation_label_paths):
 
 n_classes = len(class_map)
 input_shape = 512
-BATCH_SIZE = 4
+BATCH_SIZE = 2
 EPOCHS = 2
 training_steps = len(train_image_paths) // BATCH_SIZE
 validation_steps = len(validation_image_paths) // BATCH_SIZE
@@ -102,6 +103,7 @@ checkpoint_manager = tf.train.CheckpointManager(checkpoint,
                                                 directory=model_dir,
                                                 max_to_keep=None)
 
+
 @tf.function
 def training_step(batch):
     image, (classification_targets,
@@ -111,21 +113,16 @@ def training_step(batch):
     with tf.GradientTape() as tape:
         classification_predictions, regression_predictions = model(
             image, training=True)
-        Lreg, Lcls = loss_fn(classification_targets,
-                             classification_predictions,
-                             regression_targets,
-                             regression_predictions,
-                             background_mask,
-                             ignore_mask)
+        Lreg, Lcls, num_positive_detections = loss_fn(classification_targets,
+                                                      classification_predictions,
+                                                      regression_targets,
+                                                      regression_predictions,
+                                                      background_mask,
+                                                      ignore_mask)
         total_loss = Lreg + Lcls
     gradients = tape.gradient(total_loss, model.trainable_variables)
     optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-    loss_dict = {
-        'box_loss': Lreg,
-        'cls_loss': Lcls,
-        'total_loss': total_loss
-    }
-    return loss_dict
+    return Lreg, Lcls, total_loss, num_positive_detections
 
 
 @tf.function
@@ -134,25 +131,37 @@ def validation_step(batch):
             regression_targets,
             background_mask,
             ignore_mask) = batch
-    classification_predictions, regression_predictions  = model(
+    classification_predictions, regression_predictions = model(
         image, training=False)
-    Lreg, Lcls = loss_fn(classification_targets,
-                         classification_predictions,
-                         regression_targets,
-                         regression_predictions,
-                         background_mask,
-                         ignore_mask)
+    Lreg, Lcls, num_positive_detections = loss_fn(classification_targets,
+                                                  classification_predictions,
+                                                  regression_targets,
+                                                  regression_predictions,
+                                                  background_mask,
+                                                  ignore_mask)
     total_loss = Lreg + Lcls
-    loss_dict = {
-        'box_loss': Lreg,
-        'cls_loss': Lcls,
-        'total_loss': total_loss
-    }
-    return loss_dict
+    return Lreg, Lcls, total_loss, num_positive_detections
 
 
-# for ep in range(EPOCHS):
-#     for batch in input_fn(training=True)():
-#         pass
-#     for batch in input_fn(training=False)():
-#         pass
+for ep in range(EPOCHS):
+    for step, batch in enumerate(input_fn(training=True)()):
+        Lreg, Lcls, total_loss, num_positive_detections = training_step(batch)
+        logs = {
+            'step': '{}/{}'.format(step + 1, training_steps),
+            'box_loss': np.round(Lreg.numpy(), 2),
+            'cls_loss': np.round(Lcls.numpy(), 2),
+            'total_loss': np.round(total_loss.numpy(), 2),
+            'matches': np.int32(num_positive_detections.numpy())
+        }
+        print(logs)
+    for step, batch in enumerate(input_fn(training=False)()):
+        Lreg, Lcls, total_loss, num_positive_detections = validation_step(
+            batch)
+        logs = {
+            'step': '{}/{}'.format(step + 1, training_steps),
+            'box_loss': np.round(Lreg.numpy(), 2),
+            'cls_loss': np.round(Lcls.numpy(), 2),
+            'total_loss': np.round(total_loss.numpy(), 2),
+            'matches': np.int32(num_positive_detections.numpy())
+        }
+        print(logs)
