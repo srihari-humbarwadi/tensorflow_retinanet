@@ -26,7 +26,7 @@ def Upsampling(tensor, scale=2):
     return tf.image.resize(tensor, size=[dims[0] * scale, dims[1] * scale])
 
 
-def build_classification_subnet(n_classes=100, n_anchors=9, p=0.01):
+def build_classification_subnet(n_classes=None, n_anchors=9, p=0.01):
     input_layer = tf.keras.layers.Input(shape=[None, None, 256])
     x = input_layer
     for i in range(4):
