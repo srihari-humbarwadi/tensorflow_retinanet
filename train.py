@@ -147,18 +147,19 @@ for ep in range(EPOCHS):
     for step, batch in enumerate(input_fn(training=True)()):
         Lreg, Lcls, total_loss, num_positive_detections = training_step(batch)
         logs = {
-            'step': '{}/{}'.format(step + 1, training_steps),
+            'train_step': '{}/{}'.format(step + 1, training_steps),
             'box_loss': np.round(Lreg.numpy(), 2),
             'cls_loss': np.round(Lcls.numpy(), 2),
             'total_loss': np.round(total_loss.numpy(), 2),
             'matches': np.int32(num_positive_detections.numpy())
         }
-        print(logs)
+        if (step + 1) % 10 == 0:
+          print(logs)
     for step, batch in enumerate(input_fn(training=False)()):
         Lreg, Lcls, total_loss, num_positive_detections = validation_step(
             batch)
         logs = {
-            'step': '{}/{}'.format(step + 1, validation_steps),
+            'val_step': '{}/{}'.format(step + 1, validation_steps),
             'box_loss': np.round(Lreg.numpy(), 2),
             'cls_loss': np.round(Lcls.numpy(), 2),
             'total_loss': np.round(total_loss.numpy(), 2),

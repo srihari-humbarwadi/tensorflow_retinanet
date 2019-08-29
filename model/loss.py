@@ -3,7 +3,7 @@ import tensorflow as tf
 
 class Loss():
     def __init__(self, n_classes=None):
-        self.smooth_l1 = tf.losses.Huber(reduction='none')
+        self.smooth_l1 = tf.losses.Huber(delta=0.1, reduction='none')
         self.num_classes = n_classes
 
     def focal_loss(self, y_true, y_pred, alpha=0.25, gamma=2):
