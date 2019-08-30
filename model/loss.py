@@ -43,9 +43,9 @@ class LossV2():
         Lreg = Lreg * tf.cast(positive_regression_mask, dtype=tf.float32)
 
         Lcls = tf.reduce_sum(
-            Lcls, axis=[1, 2]).numpy() / num_positive_detections
+            Lcls, axis=[1, 2]) / num_positive_detections
         Lreg = tf.reduce_sum(
-            Lreg, axis=[1, 2]).numpy() / num_positive_detections
+            Lreg, axis=[1, 2]) / num_positive_detections
 
         Lcls = tf.nn.compute_average_loss(
             Lcls, global_batch_size=self.global_batch_size)
