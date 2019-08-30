@@ -51,7 +51,7 @@ for path in tqdm(validation_label_paths):
 n_classes = len(class_map)
 input_shape = 512
 BATCH_SIZE = 2
-EPOCHS = 2
+EPOCHS = 200
 training_steps = len(train_image_paths) // BATCH_SIZE
 validation_steps = len(validation_image_paths) // BATCH_SIZE
 
@@ -66,7 +66,7 @@ def validation_data_generator():
         yield validation_image_paths[i], validation_labels[i]
 
 
-def input_fn(training=True, context_id=None):
+def input_fn(training=True):
     def train_input_fn():
         train_dataset = tf.data.Dataset.from_generator(
             train_data_generator, output_types=(tf.string, tf.float32))
@@ -95,13 +95,16 @@ def input_fn(training=True, context_id=None):
 model = RetinaNet(input_shape=input_shape, n_classes=n_classes)
 model.build([None, input_shape, input_shape, 3])
 loss_fn = Loss(n_classes=n_classes)
-optimizer = tf.keras.optimizers.SGD(lr=0.001, momentum=0.9, decay=1e-4)
-
+optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4, clipnorm=1e-3)
+start_epoch = tf.Variable(0)
 model_dir = 'model_files/'
-checkpoint = tf.train.Checkpoint(model=model, optimizer=optimizer)
+checkpoint = tf.train.Checkpoint(model=model,
+                                 optimizer=optimizer,
+                                 start_epoch=start_epoch)
 checkpoint_manager = tf.train.CheckpointManager(checkpoint,
                                                 directory=model_dir,
-                                                max_to_keep=None)
+                                                max_to_keep=3)
+model.summary()
 
 
 @tf.function
@@ -143,10 +146,22 @@ def validation_step(batch):
     return Lreg, Lcls, total_loss, num_positive_detections
 
 
-for ep in range(EPOCHS):
+
+
+latest_checkpoint = checkpoint_manager.latest_checkpoint
+checkpoint.restore(latest_checkpoint)
+s = start_epoch.numpy()
+if not latest_checkpoint:
+    print('Training from scratch')
+else:
+    print('Resuming training from epoch {}'.format(s.numpy()))
+
+
+for ep in range(int(s), EPOCHS):
     for step, batch in enumerate(input_fn(training=True)()):
         Lreg, Lcls, total_loss, num_positive_detections = training_step(batch)
         logs = {
+            'epoch': '{}/{}'.format(ep + 1, EPOCHS),
             'train_step': '{}/{}'.format(step + 1, training_steps),
             'box_loss': np.round(Lreg.numpy(), 2),
             'cls_loss': np.round(Lcls.numpy(), 2),
@@ -154,15 +169,19 @@ for ep in range(EPOCHS):
             'matches': np.int32(num_positive_detections.numpy())
         }
         if (step + 1) % 10 == 0:
-          print(logs)
+            print(logs)
     for step, batch in enumerate(input_fn(training=False)()):
         Lreg, Lcls, total_loss, num_positive_detections = validation_step(
             batch)
         logs = {
+            'epoch': '{}/{}'.format(ep + 1, EPOCHS),
             'val_step': '{}/{}'.format(step + 1, validation_steps),
             'box_loss': np.round(Lreg.numpy(), 2),
             'cls_loss': np.round(Lcls.numpy(), 2),
             'total_loss': np.round(total_loss.numpy(), 2),
             'matches': np.int32(num_positive_detections.numpy())
         }
-        print(logs)
+        if (step + 1) % 25 == 0:
+            print(logs)
+    start_epoch.assign_add(1)
+    checkpoint_manager.save(checkpoint_number=ep + 1)

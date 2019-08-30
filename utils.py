@@ -166,7 +166,7 @@ def encode_targets(label, input_shape=None):
         Use [0, 0, 0, ... 0, n_classes] (all units set to zeros) to represent
         background class.
     """
-    scale_factors = tf.constant([10.0, 10.0, 5.0, 5.0])
+    scale_factors = tf.constant([5.0, 5.0, 5.0, 5.0])
     anchors = get_anchors(input_shape=input_shape, tensor=True)
     gt_boxes = label[:, :4]
     gt_boxes = change_box_format(gt_boxes, return_format='xywh')
@@ -206,15 +206,14 @@ def decode_targets(classification_outputs,
                    input_shape=512,
                    classification_threshold=0.05,
                    nms_threshold=0.5):
-    scale_factors = tf.constant([10.0, 10.0, 5.0, 5.0])
+    scale_factors = tf.constant([5.0, 5.0, 5.0, 5.0])
     anchors = get_anchors(input_shape=input_shape, tensor=True)
 
     '''gt targets are in one hot form, no need to apply  sigmoid to check correctness, use sigmoid during actual inference'''
-    confidence_scores = tf.reduce_max(classification_outputs, axis=-1)
     class_ids = tf.argmax(classification_outputs, axis=-1)
-    
- #     confidence_scores = tf.reduce_max(  
-#         tf.nn.sigmoid(classification_outputs), axis=-1)   
+    # confidence_scores = tf.reduce_max(classification_outputs, axis=-1)
+    confidence_scores = tf.reduce_max(  
+        tf.nn.sigmoid(classification_outputs), axis=-1)   
     regression_outputs = regression_outputs / scale_factors
     boxes = tf.concat([(regression_outputs[:, :2] * anchors[:, 2:] + anchors[:, :2]),
                        tf.math.exp(regression_outputs[:, 2:]) * anchors[:, 2:]
