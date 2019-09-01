@@ -2,3 +2,4 @@ model_files/*
 .ipynb_checkpoints/*
 */.ipynb_checkpoints/*
 model_files/*
+.DS_Store/*
