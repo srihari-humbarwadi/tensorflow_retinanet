@@ -1,6 +1,14 @@
+import cv2
 import json
 import numpy as np
 import tensorflow as tf
+import matplotlib.pyplot as plt
+
+
+def imshow(image):
+    plt.figure(figsize=(12, 12))
+    plt.axis('off')
+    plt.imshow(image)
 
 
 def compute_anchor_dimensions(ratios=[0.5, 1, 2],
@@ -99,6 +107,13 @@ def draw_bboxes(image, bbox_list):
     return tf.image.convert_image_dtype(tf.image.draw_bounding_boxes(image[None, ...],
                                                                      bboxes[None, ...],
                                                                      colors)[0, ...], dtype=tf.uint8)
+
+def draw_boxes_cv2(image, bbox_list):
+    img = np.uint8(image).copy()
+    bbox_list = np.array(bbox_list, dtype=np.int32)
+    for box in bbox_list:
+        img = cv2.rectangle(img, (box[0], box[1]), (box[2], box[3]), [0, 0, 200], 3)
+    return img
 
 
 def get_label(label_path, class_map, input_shape=512):

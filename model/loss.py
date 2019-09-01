@@ -3,12 +3,11 @@ import tensorflow as tf
 
 class LossV2():
     def __init__(self, batch_size=None, n_classes=None):
-        self.smooth_l1 = tf.losses.Huber(reduction='none')
         self.num_classes = n_classes
         self.global_batch_size = batch_size
 
     def focal_loss(self, y_true, y_pred, alpha=0.25, gamma=2):
-        y_true = tf.one_hot(y_true, depth=self.num_classes + 1)
+        y_true = tf.one_hot(tf.cast(y_true, dtype=tf.int32), depth=self.num_classes + 1)
         y_true = y_true[:, :, 1:]
         y_pred = tf.sigmoid(y_pred)
 
@@ -16,6 +15,17 @@ class LossV2():
         pt = y_true * y_pred + (1 - y_true) * (1 - y_pred)
         f_loss = -at * tf.pow(1 - pt, gamma) * tf.math.log(pt)
         return f_loss
+    
+    def smooth_l1(self, y_true, y_pred, sigma=3.0):
+        y_true = tf.cast(y_true, dtype=y_pred.dtype)
+        sigma = tf.cast(sigma, dtype=y_pred.dtype)
+        x = y_true - y_pred
+        abs_x = tf.abs(x)
+        sigma_squared = tf.square(sigma)
+        quadratic = 0.5 * tf.square(sigma * x)
+        linear = abs_x - (0.5 / sigma_squared)
+        smooth_l1_loss = tf.where(tf.less(abs_x, 1./sigma_squared), quadratic, linear)
+        return smooth_l1_loss
 
     def __call__(self,
                  classification_targets,
@@ -24,6 +34,9 @@ class LossV2():
                  regression_predictions,
                  background_mask,
                  ignore_mask):
+        background_mask = tf.cast(background_mask, dtype=tf.bool)
+        ignore_mask = tf.cast(ignore_mask, dtype=tf.bool)
+        
         num_positive_detections = tf.maximum(tf.reduce_sum(
             tf.cast(background_mask, dtype=tf.float32), axis=-1), 1.0)
 
@@ -51,47 +64,4 @@ class LossV2():
             Lcls, global_batch_size=self.global_batch_size)
         Lreg = tf.nn.compute_average_loss(
             Lreg, global_batch_size=self.global_batch_size)
-        return Lcls, Lreg, tf.reduce_mean(num_positive_detections)
-
-
-class Loss():
-    def __init__(self, n_classes=None):
-        self.smooth_l1 = tf.losses.Huber(delta=0.1, reduction='none')
-        self.num_classes = n_classes
-
-    def focal_loss(self, y_true, y_pred, alpha=0.25, gamma=2):
-        y_true = tf.one_hot(y_true, depth=self.num_classes + 1)
-        y_true = y_true[:, 1:]
-        y_pred = tf.sigmoid(y_pred)
-
-        at = alpha * y_true + (1 - y_true) * (1 - alpha)
-        pt = y_true * y_pred + (1 - y_true) * (1 - y_pred)
-        f_loss = -at * tf.pow(1 - pt, gamma) * tf.math.log(pt)
-        return f_loss
-
-    def __call__(self,
-                 classification_targets,
-                 classification_predictions,
-                 regression_targets,
-                 regression_predictions,
-                 background_mask,
-                 ignore_mask):
-        num_positive_detections = tf.maximum(tf.reduce_sum(
-            tf.cast(background_mask, dtype=tf.float32)), 1.0)
-        positive_classification_mask = tf.logical_not(ignore_mask)
-
-        regression_targets_positive = tf.boolean_mask(
-            regression_targets, background_mask)
-        regression_predictions_positive = tf.boolean_mask(
-            regression_predictions, background_mask)
-
-        classification_targets_positive = tf.boolean_mask(
-            classification_targets, positive_classification_mask)
-        classification_predictions_positive = tf.boolean_mask(
-            classification_predictions, positive_classification_mask)
-
-        Lreg = tf.reduce_sum(self.smooth_l1(regression_targets_positive,
-                                            regression_predictions_positive))
-        Lcls = tf.reduce_sum(self.focal_loss(classification_targets_positive,
-                                             classification_predictions_positive))
-        return (Lreg + Lcls) / num_positive_detections
+        return Lreg, Lcls, tf.reduce_mean(num_positive_detections)
