@@ -3,3 +3,4 @@ model_files/*
 */.ipynb_checkpoints/*
 model_files/*
 .DS_Store/*
+__pycache__
