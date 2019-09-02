@@ -116,6 +116,14 @@ def draw_boxes_cv2(image, bbox_list):
     return img
 
 
+def random_image_augmentation(img):
+    img = tf.image.random_brightness(img, max_delta=50.)
+    img = tf.image.random_saturation(img, lower=0.5, upper=1.5)
+    img = tf.image.random_hue(img, max_delta=0.2)
+    img = tf.image.random_contrast(img, lower=0.5, upper=1.5)
+    img = tf.clip_by_value(img, 0, 255)
+    return img
+
 def get_label(label_path, class_map, input_shape=512):
     with open(label_path, 'r') as f:
         temp = json.load(f)
