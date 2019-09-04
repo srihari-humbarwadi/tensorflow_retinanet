@@ -13,13 +13,13 @@ border="10" /></a>
 
 
 ## Progress Tracker
- - [x] Implement data input pipeline with tf.data
- - [x] Implement train and validation steps
- - [x] Add random_flip
- - [x] TPU support
- - [ ] LR schedule and handle large batches (TPU)
- - [ ] Train on BDD dataset
- - [x] Add inference code
- - [ ] Publish results
- - [ ] Add support for video inference
- - [ ] Code clean up & refactoring
+ * [x] Implement data input pipeline with tf.data
+ * [x] Implement train and validation steps
+ * [x] Add random_flip
+ * [x] TPU support
+ * [ ] LR schedule and handle large batches (TPU)
+ * [ ] Train on BDD dataset
+ * [x] Add inference code
+ * [ ] Publish results
+ * [ ] Add support for video inference
+ * [ ] Code clean up & refactoring
