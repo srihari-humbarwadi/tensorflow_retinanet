@@ -1,4 +1,3 @@
-# WORK IN PROGESSS, check /tpu/tpu_train.ipynb for latest updates
 
 # RetinaNet - Focal Loss for Dense Object Detection
 ![architecture](architecture.png)
@@ -23,3 +22,4 @@ border="10" /></a>
  * [ ] Publish results
  * [ ] Add support for video inference
  * [ ] Code clean up & refactoring
+# WORK IN PROGESSS, check /tpu/tpu_train.ipynb for latest updates
