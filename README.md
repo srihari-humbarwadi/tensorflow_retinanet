@@ -18,7 +18,7 @@ border="10" /></a>
  * [x] TPU support
  * [ ] LR schedule and handle large batches (TPU)
  * [ ] Train on BDD dataset
- * [x] Add inference code
+ * [ ] Add inference code
  * [ ] Publish results
  * [ ] Add support for video inference
  * [ ] Code clean up & refactoring
