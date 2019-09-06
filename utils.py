@@ -129,7 +129,27 @@ def draw_boxes_cv2(image, bbox_list, class_ids, scores, model_input_shape, class
                             (box[2], box[3]), [30, 15, 200], 1)
     return img
 
+@tf.function
+def random_image_augmentation(img):
+    img = tf.image.random_brightness(img, max_delta=50.)
+    img = tf.image.random_saturation(img, lower=0.5, upper=1.5)
+    img = tf.image.random_hue(img, max_delta=0.2)
+    img = tf.image.random_contrast(img, lower=0.5, upper=1.5)
+    img = tf.clip_by_value(img, 0, 255)
+    return img
 
+@tf.function
+def flip_data(image, boxes, w):
+    if tf.random.uniform(()) > 0.5:
+        image = tf.image.flip_left_right(image)
+        boxes = tf.stack([
+            w - boxes[:, 2],
+            boxes[:, 1],
+            w - boxes[:, 0],
+            boxes[:, 3]
+        ], axis=-1)
+    return image, boxes
+        
 @tf.function
 def encode_targets(label, input_shape=None):
     """We use the assignment rule from RPN.

@@ -23,7 +23,7 @@ def conv_block(x,
 
 def Upsampling(tensor, scale=2):
     dims = tensor.shape.as_list()[1:-1]
-    return tf.image.resize(tensor, size=[dims[0] * scale, dims[1] * scale])
+    return tf.image.resize_bilinear(tensor, size=[dims[0] * scale, dims[1] * scale], align_corners=True)
 
 
 def build_classification_subnet(n_classes=None, n_anchors=9, p=0.01):
@@ -33,7 +33,7 @@ def build_classification_subnet(n_classes=None, n_anchors=9, p=0.01):
         x = conv_block(
             x, 256, 3, kernel_init=tf.keras.initializers.RandomNormal(0.0, 0.01))
         x = tf.keras.layers.ReLU()(x)
-    bias_init = -tf.math.log((1 - p) / p).numpy()
+    bias_init = -np.log((1 - p) / p)
     output_layer = tf.keras.layers.Conv2D(filters=n_classes * n_anchors,
                                           kernel_size=3,
                                           padding='same',
@@ -61,5 +61,6 @@ def build_regression_subnet(n_anchors=9):
                                               0.0, 0.01),
                                           bias_initializer=tf.keras.initializers.zeros(),
                                           activation=None)(x)
-    output_layer = tf.keras.layers.Reshape(target_shape=[-1, 4])(output_layer)
+    output_layer = tf.keras.layers.Reshape(
+        target_shape=[-1, 4])(output_layer)
     return tf.keras.Model(inputs=input_layer, outputs=output_layer, name='regression_subnet')

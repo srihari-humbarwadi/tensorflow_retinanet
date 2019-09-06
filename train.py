@@ -1,27 +1,11 @@
-from glob import glob
 from model.retinanet import RetinaNet
-from model.loss import Loss
-import numpy as np
-import os
 import tensorflow as tf
-from tqdm import tqdm
-from utils import get_label, load_data
+from utils import encode_targets, random_image_augmentation, flip_data
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+strategy = tf.distribute.MirroredStrategy()
 
-train_image_paths = sorted(
-    glob('../../bdd/bdd100k/images/100k/train/*'))
-train_label_paths = sorted(
-    glob('../../bdd/bdd100k/labels/100k/train/*'))
-validation_image_paths = sorted(
-    glob('../../bdd/bdd100k/images/100k/val/*'))
-validation_label_paths = sorted(
-    glob('../../bdd/bdd100k/labels/100k/val/*'))
-
-print('Found training {} images'.format(len(train_image_paths)))
-print('Found training {} labels'.format(len(train_label_paths)))
-print('Found validation {} images'.format(len(validation_image_paths)))
-print('Found validation {} labels'.format(len(validation_label_paths)))
+print('Tensorflow', tf.__version__)
+print('Num Replicas : {}'.format(strategy.num_replicas_in_sync))
 
 class_map = {value: idx for idx, value in enumerate(['bus',
                                                      'traffic light',
@@ -33,155 +17,113 @@ class_map = {value: idx for idx, value in enumerate(['bus',
                                                      'car',
                                                      'train',
                                                      'rider'])}
-for image, label in zip(train_image_paths, train_label_paths):
-    assert image.split(
-        '/')[-1].split('.')[0] == label.split('/')[-1].split('.')[0]
-for image, label in zip(validation_image_paths, validation_label_paths):
-    assert image.split(
-        '/')[-1].split('.')[0] == label.split('/')[-1].split('.')[0]
 
-train_labels = []
-validation_labels = []
-
-for path in tqdm(train_label_paths):
-    train_labels.append(get_label(path, class_map))
-for path in tqdm(validation_label_paths):
-    validation_labels.append(get_label(path, class_map))
-
-n_classes = len(class_map)
-input_shape = 512
-BATCH_SIZE = 2
+INPUT_SHAPE = 640
+BATCH_SIZE = 8 * strategy.num_replicas_in_sync
+N_CLASSES = len(class_map)
 EPOCHS = 200
-training_steps = len(train_image_paths) // BATCH_SIZE
-validation_steps = len(validation_image_paths) // BATCH_SIZE
+training_steps = 70000 // BATCH_SIZE
+val_steps = 10000 // BATCH_SIZE
+LR = strategy.num_replicas_in_sync * 1e-4
 
 
-def train_data_generator():
-    for i in range(len(train_image_paths)):
-        yield train_image_paths[i], train_labels[i]
+with strategy.scope():
+    feature_description = {
+        'image': tf.io.FixedLenFeature([], tf.string),
+        'xmins': tf.io.VarLenFeature(tf.float32),
+        'ymins': tf.io.VarLenFeature(tf.float32),
+        'xmaxs': tf.io.VarLenFeature(tf.float32),
+        'ymaxs': tf.io.VarLenFeature(tf.float32),
+        'labels': tf.io.VarLenFeature(tf.float32)
+    }
+
+    @tf.function
+    def parse_example(example_proto):
+        parsed_example = tf.io.parse_single_example(
+            example_proto, feature_description)
+        image = tf.image.decode_jpeg(parsed_example['image'], channels=3)
+        bboxes = tf.stack([
+            tf.sparse_tensor_to_dense(parsed_example['xmins']),
+            tf.sparse_tensor_to_dense(parsed_example['ymins']),
+            tf.sparse_tensor_to_dense(parsed_example['xmaxs']),
+            tf.sparse_tensor_to_dense(parsed_example['ymaxs'])
+        ], axis=-1)
+        class_ids = tf.reshape(tf.sparse_tensor_to_dense(
+            parsed_example['labels']), [-1, 1])
+        return image, bboxes, class_ids
+
+    def load_data(input_shape):
+        h, w = input_shape, input_shape
+
+        @tf.function
+        def load_data_(example_proto, input_shape=input_shape):
+            image, boxes_, class_ids = parse_example(example_proto)
+            image = tf.image.resize(image, size=[h, w])
+            boxes = tf.stack([
+                tf.clip_by_value(boxes_[:, 0] * w, 0, w),
+                tf.clip_by_value(boxes_[:, 1] * h, 0, h),
+                tf.clip_by_value(boxes_[:, 2] * w, 0, w),
+                tf.clip_by_value(boxes_[:, 3] * h, 0, h)
+            ], axis=-1)
+            image, boxes = flip_data(image, boxes, w)
+            image = random_image_augmentation(image)
+            image = image[:, :, ::-1] - tf.constant([103.939, 116.779, 123.68])
+            label = tf.concat([boxes, class_ids], axis=-1)
+            cls_targets, reg_targets, bg, ig = encode_targets(
+                label, input_shape=input_shape)
+            bg = tf.cast(bg, dtype=tf.float32)
+            ig = tf.cast(ig, dtype=tf.float32)
+            cls_targets = tf.cast(cls_targets, dtype=tf.float32)
+            return (image, cls_targets, reg_targets, bg, ig), (tf.ones((1, )), tf.ones((1, )))
+        return load_data_
+
+    train_files = tf.data.Dataset.list_files(
+        'BDD100k/train*')
+    train_dataset = train_files.interleave(tf.data.TFRecordDataset,
+                                           cycle_length=16,
+                                           block_length=16,
+                                           num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    train_dataset = train_dataset.map(
+        load_data(INPUT_SHAPE), num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    train_dataset = train_dataset.batch(
+        BATCH_SIZE, drop_remainder=True).repeat()
+    train_dataset = train_dataset.prefetch(tf.data.experimental.AUTOTUNE)
+
+    val_files = tf.data.Dataset.list_files(
+        'BDD100k/validation*')
+    val_dataset = val_files.interleave(tf.data.TFRecordDataset,
+                                       cycle_length=16,
+                                       block_length=16,
+                                       num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    val_dataset = val_dataset.map(
+        load_data(INPUT_SHAPE), num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    val_dataset = val_dataset.batch(BATCH_SIZE, drop_remainder=True).repeat()
+    val_dataset = val_dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
 
-def validation_data_generator():
-    for i in range(len(validation_image_paths)):
-        yield validation_image_paths[i], validation_labels[i]
+with strategy.scope():
+    model = RetinaNet(input_shape=INPUT_SHAPE,
+                      n_classes=N_CLASSES, training=True)
+    optimizer = tf.keras.optimizers.Adam(learning_rate=LR, clipnorm=0.001)
 
-
-def input_fn(training=True):
-    def train_input_fn():
-        train_dataset = tf.data.Dataset.from_generator(
-            train_data_generator, output_types=(tf.string, tf.float32))
-        train_dataset = train_dataset.shuffle(1024)
-        train_dataset = train_dataset.map(
-            load_data(input_shape), num_parallel_calls=tf.data.experimental.AUTOTUNE)
-        train_dataset = train_dataset.batch(BATCH_SIZE, drop_remainder=True)
-        train_dataset = train_dataset.prefetch(tf.data.experimental.AUTOTUNE)
-        return train_dataset
-
-    def validation_input_fn():
-        validation_dataset = tf.data.Dataset.from_generator(
-            validation_data_generator, output_types=(tf.string, tf.float32))
-        validation_dataset = validation_dataset.map(
-            load_data(input_shape), num_parallel_calls=tf.data.experimental.AUTOTUNE)
-        validation_dataset = validation_dataset.batch(
-            BATCH_SIZE, drop_remainder=True)
-        validation_dataset = validation_dataset.prefetch(
-            tf.data.experimental.AUTOTUNE)
-        return validation_dataset
-    if training:
-        return train_input_fn
-    return validation_input_fn
-
-
-model = RetinaNet(input_shape=input_shape, n_classes=n_classes)
-model.build([None, input_shape, input_shape, 3])
-loss_fn = Loss(n_classes=n_classes)
-optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4, clipnorm=1e-3)
-start_epoch = tf.Variable(0)
-model_dir = 'model_files/'
-checkpoint = tf.train.Checkpoint(model=model,
-                                 optimizer=optimizer,
-                                 start_epoch=start_epoch)
-checkpoint_manager = tf.train.CheckpointManager(checkpoint,
-                                                directory=model_dir,
-                                                max_to_keep=3)
-model.summary()
-
-
-@tf.function
-def training_step(batch):
-    image, (classification_targets,
-            regression_targets,
-            background_mask,
-            ignore_mask) = batch
-    with tf.GradientTape() as tape:
-        classification_predictions, regression_predictions = model(
-            image, training=True)
-        Lreg, Lcls, num_positive_detections = loss_fn(classification_targets,
-                                                      classification_predictions,
-                                                      regression_targets,
-                                                      regression_predictions,
-                                                      background_mask,
-                                                      ignore_mask)
-        total_loss = Lreg + Lcls
-    gradients = tape.gradient(total_loss, model.trainable_variables)
-    optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-    return Lreg, Lcls, total_loss, num_positive_detections
-
-
-@tf.function
-def validation_step(batch):
-    image, (classification_targets,
-            regression_targets,
-            background_mask,
-            ignore_mask) = batch
-    classification_predictions, regression_predictions = model(
-        image, training=False)
-    Lreg, Lcls, num_positive_detections = loss_fn(classification_targets,
-                                                  classification_predictions,
-                                                  regression_targets,
-                                                  regression_predictions,
-                                                  background_mask,
-                                                  ignore_mask)
-    total_loss = Lreg + Lcls
-    return Lreg, Lcls, total_loss, num_positive_detections
-
-
-
-
-latest_checkpoint = checkpoint_manager.latest_checkpoint
-checkpoint.restore(latest_checkpoint)
-s = start_epoch.numpy()
-if not latest_checkpoint:
-    print('Training from scratch')
-else:
-    print('Resuming training from epoch {}'.format(s.numpy()))
-
-
-for ep in range(int(s), EPOCHS):
-    for step, batch in enumerate(input_fn(training=True)()):
-        Lreg, Lcls, total_loss, num_positive_detections = training_step(batch)
-        logs = {
-            'epoch': '{}/{}'.format(ep + 1, EPOCHS),
-            'train_step': '{}/{}'.format(step + 1, training_steps),
-            'box_loss': np.round(Lreg.numpy(), 2),
-            'cls_loss': np.round(Lcls.numpy(), 2),
-            'total_loss': np.round(total_loss.numpy(), 2),
-            'matches': np.int32(num_positive_detections.numpy())
-        }
-        if (step + 1) % 10 == 0:
-            print(logs)
-    for step, batch in enumerate(input_fn(training=False)()):
-        Lreg, Lcls, total_loss, num_positive_detections = validation_step(
-            batch)
-        logs = {
-            'epoch': '{}/{}'.format(ep + 1, EPOCHS),
-            'val_step': '{}/{}'.format(step + 1, validation_steps),
-            'box_loss': np.round(Lreg.numpy(), 2),
-            'cls_loss': np.round(Lcls.numpy(), 2),
-            'total_loss': np.round(total_loss.numpy(), 2),
-            'matches': np.int32(num_positive_detections.numpy())
-        }
-        if (step + 1) % 25 == 0:
-            print(logs)
-    start_epoch.assign_add(1)
-    checkpoint_manager.save(checkpoint_number=ep + 1)
+    loss_dict = {
+        'box': lambda x, y: y,
+        'focal': lambda x, y: y
+    }
+    callback_list = [
+        tf.keras.callbacks.TensorBoard(
+            log_dir='logs', update_freq='epoch'),
+        tf.keras.callbacks.ModelCheckpoint('model_files/weights',
+                                           save_weights_only=True,
+                                           save_best_only=True,
+                                           monitor='loss',
+                                           verbose=1)
+    ]
+    model.compile(optimizer=optimizer, loss=loss_dict)
+    model.fit(train_dataset,
+              epochs=EPOCHS,
+              steps_per_epoch=training_steps,
+              validation_data=val_dataset,
+              validation_steps=val_steps,
+              validation_freq=5,
+              callbacks=callback_list)
