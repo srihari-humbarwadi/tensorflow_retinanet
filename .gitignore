@@ -1,8 +1,8 @@
-**/.ipynb_checkpoints/*
-.ipynb_checkpoints/*
-model_files/*
-.DS_Store/*
-**/.DS_Store/*
+**/.ipynb_checkpoints
+.ipynb_checkpoints
+model_files
+.DS_Store
+**/.DS_Store
 **/__pycache__
 __pycache__
-tpu/model_files/*
+tpu/model_files
