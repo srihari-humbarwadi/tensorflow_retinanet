@@ -1,10 +1,11 @@
+from resnet50 import ResNet50
 import tensorflow as tf
 from .blocks import build_classification_subnet, build_regression_subnet, conv_block, Upsampling
 
 
 def RetinaNet(input_shape=None, n_classes=None):
     H = W = input_shape
-    base_model = tf.keras.applications.ResNet50(
+    base_model = ResNet50(
         input_shape=[H, W, 3], weights='imagenet', include_top=False)
 
     resnet_block_output_names = ['conv3_block4_out',
