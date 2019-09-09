@@ -34,7 +34,6 @@ def RetinaNet(input_shape=None, n_classes=None, training=False):
         M4), resnet_block_outputs['C3']], name='P3_merge')
     P4 = conv_block(M4, 256, 3, name='P4')
     P3 = conv_block(M3, 256, 3, name='P3')
-#         pyrammid_features = [P7, P6, P5, P4, P3]
     pyrammid_features = [P3, P4, P5, P6, P7]
 
     classification_subnet = build_classification_subnet(
