@@ -7,3 +7,5 @@ model_files
 __pycache__
 tpu/model_files
 tpu/model_files_v2
+tpu/model_files_v2_old
+tpu/test_outputs
