@@ -2,11 +2,11 @@
 # RetinaNet - Focal Loss for Dense Object Detection
 ![architecture](architecture.png)
 
-<a href="c5b2506d-9121123c.jpg" target="_blank"><img 
-src="c5b2506d-9121123c.jpg" alt="val_inference" title="predicted boxes" width="1280" height="720" 
+<a href="tpu/outputs/c5b2506d-9121123c.jpg" target="_blank"><img 
+src="tpu/outputsc5b2506d-9121123c.jpg" alt="not available_1" title="predicted boxes" width="1280" height="720" 
 border="10" /></a>
-<a href="c5b2506d-aa9e5484.jpg " target="_blank"><img 
-src="c5b2506d-aa9e5484.jpg" alt="val_inference" title="predicted boxes" width="1280" height="720" 
+<a href="tpu/outputs/c5b2506d-aa9e5484.jpg " target="_blank"><img 
+src="tpu/outputs/c5b2506d-aa9e5484.jpg" alt="not available_2" title="predicted boxes" width="1280" height="720" 
 border="10" /></a>
 
 
