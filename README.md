@@ -2,11 +2,11 @@
 # RetinaNet - Focal Loss for Dense Object Detection
 ![architecture](architecture.png)
 
-<a href="c0efbe92-d5be8958.jpg" target="_blank"><img 
-src="c0efbe92-d5be8958.jpg" alt="val_inference" title="predicted boxes" width="1280" height="720" 
+<a href="c5b2506d-9121123c.jpg" target="_blank"><img 
+src="c5b2506d-9121123c.jpg" alt="val_inference" title="predicted boxes" width="1280" height="720" 
 border="10" /></a>
-<a href="c10163bb-7ad315ce.jpg " target="_blank"><img 
-src="c10163bb-7ad315ce.jpg" alt="val_inference" title="predicted boxes" width="1280" height="720" 
+<a href="c5b2506d-aa9e5484.jpg " target="_blank"><img 
+src="c5b2506d-aa9e5484.jpg" alt="val_inference" title="predicted boxes" width="1280" height="720" 
 border="10" /></a>
 
 
@@ -17,9 +17,8 @@ border="10" /></a>
  * [x] Add random_flip
  * [x] TPU support
  * [ ] LR schedule and handle large batches (TPU)
- * [ ] Train on BDD dataset
- * [ ] Add inference code
+ * [x] Train on BDD dataset
+ * [x] Add inference code
  * [ ] Publish results
  * [ ] Add support for video inference
  * [ ] Code clean up & refactoring
-# WORK IN PROGESSS, check /tpu/tpu_train.ipynb for latest updates
