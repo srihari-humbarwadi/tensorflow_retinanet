@@ -3,4 +3,4 @@
   - The training under this directory only works for tensorflow 1.14.0.
   - The tfrecords should be uploaded to GCS bucket since TPU does not support local file system.
   - Checkpoints will be saved to GCS bucket.
-  - Each epoch takes around 10 mins on google colaboratory with TPUv2-8 runtime.
+  - Each epoch takes around 15 mins on google colaboratory with TPUv2-8 runtime.
